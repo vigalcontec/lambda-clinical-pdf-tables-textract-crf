@@ -100,3 +100,52 @@ resource "aws_iam_role_policy" "kms_access" {
     ]
   })
 }
+
+# -----------------------------------------------------------------------------
+# Textract Access for Table Extraction
+# -----------------------------------------------------------------------------
+resource "aws_iam_role_policy" "textract_access" {
+  name = "${local.full_name}-textract"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "TextractAnalyze"
+        Effect = "Allow"
+        Action = [
+          "textract:AnalyzeDocument",
+          "textract:StartDocumentAnalysis",
+          "textract:GetDocumentAnalysis"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# -----------------------------------------------------------------------------
+# DynamoDB Access for Job Tracking
+# -----------------------------------------------------------------------------
+resource "aws_iam_role_policy" "dynamodb_access" {
+  name = "${local.full_name}-dynamodb"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DynamoDBUpdateJob"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:UpdateItem",
+          "dynamodb:GetItem"
+        ]
+        Resource = [
+          local.dynamodb.clinical_pdf_jobs.table_arn
+        ]
+      }
+    ]
+  })
+}

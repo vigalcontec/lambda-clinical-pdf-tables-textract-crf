@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     aws_region: str = "eu-west-1"
     log_level: str = "INFO"
 
+    # DynamoDB configuration (from SSM via Terraform)
+    dynamodb_table_name: str = ""  # type: ignore[assignment]
+
 
 @lru_cache
 def get_settings() -> Settings:

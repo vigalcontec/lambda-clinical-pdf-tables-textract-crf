@@ -1,0 +1,91 @@
+{
+  "status": "SUCCESS",
+  "s3_bucket": "datalake-raw-vigalcontec-dev-002332700133",
+  "s3_key": "crf/clinical_pdfs/keytruda-epar-product-information_en.pdf",
+  "pages_processed": [7, 8],
+  "tables_extracted": 1,
+  "tables": [
+    {
+      "rows": [
+        [
+          "Immune-mediated adverse reactions",
+          "Severity",
+          "Treatment modification"
+        ],
+        [
+          "Pneumonitis",
+          "Grade 2",
+          "Withhold until adverse reactions recover to Grades 0-1*"
+        ],
+        [
+          "",
+          "Grades 3 or 4, or recurrent Grade 2",
+          "Permanently discontinue"
+        ],
+        [
+          "Colitis",
+          "Grades 2 or 3",
+          "Withhold until adverse reactions recover to Grades 0-1*"
+        ],
+        [
+          "",
+          "Grade 4 or recurrent Grade 3",
+          "Permanently discontinue"
+        ],
+        [
+          "Nephritis",
+          "Grade 2 with creatinine > 1.5 to \u22643 times upper limit of normal (ULN)",
+          "Withhold until adverse reactions recover to Grades 0-1*"
+        ],
+        [
+          "",
+          "Grade \u2265 3 with creatinine > 3 times ULN",
+          "Permanently discontinue"
+        ],
+        [
+          "Endocrinopathies",
+          "Grade 2 adrenal insufficiency and hypophysitis",
+          "Withhold treatment until controlled by hormone replacement"
+        ],
+        [
+          "",
+          "Grades 3 or 4 adrenal insufficiency or symptomatic hypophysitis Type 1 diabetes associated with Grade \u2265 3 hyperglycaemia (glucose > 250 mg/dL or > 13.9 mmol/L) or associated with ketoacidosis Hyperthyroidism Grade \u2265 3",
+          "Withhold until adverse reactions recover to Grades 0-1* For patients with Grade 3 or Grade 4 endocrinopathies that improved to Grade 2 or lower and are controlled with hormone replacement, if indicated, continuation of pembrolizumab may be considered after corticosteroid taper, if needed. Otherwise treatment should be discontinued."
+        ],
+        [
+          "",
+          "Hypothyroidism",
+          "Hypothyroidism may be managed with replacement therapy without treatment interruption."
+        ],
+        [
+          "Hepatitis NOTE: for RCC patients treated with pembrolizumab in",
+          "Grade 2 with aspartate aminotransferase (AST) or alanine aminotransferase (ALT) > 3 to 5 times ULN or total bilirubin > 1.5 to 3 times ULN",
+          "Withhold until adverse reactions recover to Grades 0-1*"
+        ],
+        [
+          "combination with axitinib with liver enzyme elevations, see dosing",
+          "Grade \u2265 3 with AST or ALT > 5 times ULN or total bilirubin > 3 times ULN",
+          "Permanently discontinue"
+        ],
+        [
+          "guidelines following this table.",
+          "In case of liver metastasis with baseline Grade 2 elevation of AST or ALT, hepatitis with AST or ALT increases > 50% and lasts > 1 week",
+          "Permanently discontinue"
+        ],
+        [
+          "Skin reactions",
+          "Grade 3 or suspected Stevens-Johnson syndrome (SJS) or toxic epidermal necrolysis (TEN)",
+          "Withhold until adverse reactions recover to Grades 0-1*"
+        ],
+        [
+          "",
+          "Grade 4 or confirmed SJS or TEN",
+          "Permanently discontinue"
+        ]
+      ],
+      "row_count": 15,
+      "column_count": 3,
+      "confidence": 99.951171875
+    }
+  ]
+}

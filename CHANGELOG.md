@@ -5,7 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-04-30
+## [0.1.0] - 2026-05-17
+
+### Added
+
+- **Textract Table Extraction** - Extract tables from PDF pages using AWS Textract
+- **PDF Page Extraction** - Use PyMuPDF to extract specific pages from PDF
+- **Sync/Async API** - Auto-select based on document size (sync for ≤5 pages, <5MB)
+- **Page Group Flattening** - Handle nested page groups from locator lambda
+- **Structured Table Output** - Parse Textract response to rows/columns JSON
+- **Error Handling** - Graceful error handling with detailed error responses
+
+### Input/Output Contract
+
+**Input Event:**
+```json
+{
+  "s3_bucket": "datalake-raw-...",
+  "s3_key": "clinical_pdfs/document.pdf",
+  "pages": [7, 8, [16, 17, 18], 26]
+}
+```
+
+**Output:**
+```json
+{
+  "status": "SUCCESS",
+  "s3_bucket": "...",
+  "s3_key": "...",
+  "pages_processed": [7, 8, 16, 17, 18, 26],
+  "tables_extracted": 5,
+  "tables": [
+    {
+      "rows": [["Header1", "Header2"], ["Value1", "Value2"]],
+      "row_count": 2,
+      "column_count": 2,
+      "confidence": 98.5
+    }
+  ]
+}
+```
+
+---
+
+## [0.0.0] - 2026-04-30
 
 ### Added
 

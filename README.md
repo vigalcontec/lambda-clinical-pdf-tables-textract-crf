@@ -1,11 +1,46 @@
-# AWS Lambda Python Template
+# Lambda Clinical PDF Tables Textract
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://www.python.org/)
 [![Poetry](https://img.shields.io/badge/Poetry-1.8%2B-60A5FA?logo=poetry)](https://python-poetry.org/)
 [![Docker](https://img.shields.io/badge/Docker-ECR-2496ED?logo=docker)](https://aws.amazon.com/ecr/)
 [![Terraform](https://img.shields.io/badge/Terraform-1.10%2B-7B42BC?logo=terraform)](https://www.terraform.io/)
 
-Production-ready AWS Lambda template using Python, Poetry for dependency management, and Docker container deployment to ECR.
+AWS Lambda function that extracts tables from clinical PDF documents using AWS Textract. Receives a PDF S3 path and a list of pages containing tables, then uses Textract to extract structured table data.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Clinical PDF Tables Textract                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Input Event:                                                              │
+│   {                                                                         │
+│     "s3_bucket": "datalake-raw-...",                                       │
+│     "s3_key": "clinical_pdfs/document.pdf",                                │
+│     "pages": [7, 8, [16, 17, 18], 26]                                      │
+│   }                                                                         │
+│                                                                             │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                 │
+│   │ Download PDF │───▶│ Extract Pages│───▶│   Textract   │                 │
+│   │   from S3    │    │  (PyMuPDF)   │    │   Analyze    │                 │
+│   └──────────────┘    └──────────────┘    └──────────────┘                 │
+│                                                  │                          │
+│                                                  ▼                          │
+│                                          ┌──────────────┐                   │
+│                                          │ Parse Tables │                   │
+│                                          │   to JSON    │                   │
+│                                          └──────────────┘                   │
+│                                                                             │
+│   Output:                                                                   │
+│   {                                                                         │
+│     "status": "SUCCESS",                                                    │
+│     "tables_extracted": 5,                                                  │
+│     "tables": [{"rows": [...], "row_count": 10, ...}]                      │
+│   }                                                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -25,23 +60,23 @@ Production-ready AWS Lambda template using Python, Poetry for dependency managem
 
 ## Features
 
+- ✅ **AWS Textract** - Table extraction with structured output
+- ✅ **PyMuPDF** - Efficient PDF page extraction
+- ✅ **Sync/Async API** - Auto-selects based on document size
+- ✅ **Page Groups** - Handles multi-page table groups from locator
 - ✅ **Python 3.12** - Latest Python runtime
 - ✅ **Poetry** - Modern dependency management with lock file
 - ✅ **Docker** - Container-based Lambda deployment
-- ✅ **ECR** - AWS Elastic Container Registry for images
 - ✅ **Terraform** - Infrastructure as Code
 - ✅ **GitHub Actions** - CI/CD pipeline with OIDC authentication
-- ✅ **Multi-environment** - dev, qa, prod support
-- ✅ **SSM Integration** - Read datalake bucket/KMS ARNs from Parameter Store
 - ✅ **Structured Logging** - AWS Lambda Powertools
-- ✅ **Type Hints** - Full type annotation support
 
 ---
 
 ## Repository Structure
 
 ```
-aws-lambda-python-template/
+lambda-clinical-pdf-tables-textract-crf/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml              # CI/CD pipeline

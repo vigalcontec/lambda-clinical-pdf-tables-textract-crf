@@ -6,9 +6,9 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Project Configuration (UPDATE THESE)
   # ─────────────────────────────────────────────────────────────────────────────
-  function_name = "my-lambda-function"  # Lambda function name (without env suffix)
-  project_name  = "my-project"          # Project name for tagging
-  company_name  = "vigalcontec"         # Company name for resource naming
+  function_name = "lambda-clinical-pdf-tables-textract-crf"  # Lambda function name (without env suffix)
+  project_name  = "clinical-rag-foundry"                     # Project name for tagging
+  company_name  = "vigalcontec"                              # Company name for resource naming
 
   # ─────────────────────────────────────────────────────────────────────────────
   # AWS Configuration
@@ -18,8 +18,8 @@ locals {
   # ─────────────────────────────────────────────────────────────────────────────
   # Lambda Configuration
   # ─────────────────────────────────────────────────────────────────────────────
-  timeout            = 30    # Lambda timeout in seconds
-  memory_size        = 256   # Lambda memory in MB
+  timeout            = 300   # Lambda timeout in seconds (5 min for Textract)
+  memory_size        = 512   # Lambda memory in MB (for PDF processing)
   log_level          = "INFO"
   log_retention_days = 30
 
