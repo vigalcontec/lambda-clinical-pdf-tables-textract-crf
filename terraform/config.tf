@@ -24,6 +24,11 @@ locals {
   log_retention_days = 30
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # SSM Export Name (used by Step Function to find this Lambda)
+  # ─────────────────────────────────────────────────────────────────────────────
+  ssm_export_name = "clinical-pdf-textract-crf"
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Computed Values (DO NOT MODIFY)
   # ─────────────────────────────────────────────────────────────────────────────
   account_id    = data.aws_caller_identity.current.account_id
