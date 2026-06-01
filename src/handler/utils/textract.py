@@ -30,7 +30,7 @@ def extract_tables_sync(pdf_bytes: bytes) -> dict[str, Any]:
         Document={"Bytes": pdf_bytes},
         FeatureTypes=["TABLES"],
     )
-    return response
+    return dict(response)
 
 
 @tracer.capture_method
@@ -81,7 +81,7 @@ def start_textract_analysis(bucket: str, key: str) -> str:
         DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}},
         FeatureTypes=["TABLES"],
     )
-    job_id = response["JobId"]
+    job_id: str = response["JobId"]
     logger.info("Started Textract job", extra={"job_id": job_id, "bucket": bucket, "key": key})
     return job_id
 
@@ -135,7 +135,7 @@ def wait_for_textract_completion(job_id: str, max_wait_seconds: int = 300) -> di
 
     # Return response with all blocks combined
     response["Blocks"] = all_blocks
-    return response
+    return dict(response)
 
 
 @tracer.capture_method

@@ -370,6 +370,105 @@ make coverage
 make test-integration
 ```
 
+### Local Testing with AWS Credentials
+
+To test the Lambda locally with a real PDF file and AWS Textract, create a `test_local.py` file:
+
+```python
+import json
+import os
+import sys
+
+# Disable X-Ray tracing for local testing
+os.environ["POWERTOOLS_TRACE_DISABLED"] = "true"
+os.environ["AWS_REGION"] = "eu-west-1"
+
+from handler.main import handler
+from handler.utils.pdf import extract_pages_as_pdf
+
+
+class MockContext:
+    """Mock Lambda context for local testing."""
+    function_name = "local-test"
+    memory_limit_in_mb = 256
+    invoked_function_arn = "arn:aws:lambda:eu-west-1:123456789012:function:local-test"
+    aws_request_id = "local-request-id"
+
+
+def test_with_local_pdf(pdf_path: str, pages: str = "1"):
+    """Test PDF page extraction locally.
+    
+    Args:
+        pdf_path: Path to local PDF file
+        pages: Pages to extract (e.g., "1,2,3" or "1-5" or "7,8,16-18")
+    """
+    # Parse pages argument
+    test_pages: list[int] = []
+    for part in pages.split(","):
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            test_pages.extend(range(start, end + 1))
+        else:
+            test_pages.append(int(part))
+
+    print(f"Testing with local file: {pdf_path}")
+    print(f"Pages to extract: {test_pages}")
+
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    print(f"PDF size: {len(pdf_bytes)} bytes")
+
+    # Extract pages
+    extracted_pdf = extract_pages_as_pdf(pdf_bytes, test_pages)
+    print(f"Extracted PDF size: {len(extracted_pdf)} bytes")
+
+    print("\nNote: To test Textract extraction, run with valid AWS credentials.")
+
+
+def test_with_s3_event():
+    """Test with a mock S3 event (requires AWS credentials and S3 access)."""
+    test_event = {
+        "s3_bucket": "datalake-raw-vigalcontec-dev-002332700133",
+        "s3_key": "crf/clinical_pdfs/keytruda/20260522164300/keytruda-epar-product-information_en.pdf",
+        "product_name": "keytruda",
+        "table_name": "Table 7: Efficacy results by BRAF mutation status in KEYNOTE-006",
+        "table_number": 7,
+        "page": 32,
+        "table_index_on_page": 1,
+        "events_s3_key": "crf/clinical_pdfs/keytruda/20260522164300/keytruda-epar-product-information_en_events.json"
+    }
+
+    print(f"\n{'='*60}")
+    print(f"Testing: {test_event['table_name']}")
+    print(f"Page: {test_event['page']}, Table Index: {test_event['table_index_on_page']}")
+    print(f"{'='*60}")
+    
+    result = handler(test_event, MockContext())
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        # Test with local PDF file
+        pdf_path = sys.argv[1]
+        pages = sys.argv[2] if len(sys.argv) > 2 else "1"
+        test_with_local_pdf(pdf_path, pages)
+    else:
+        # Test with S3 event (requires AWS credentials)
+        test_with_s3_event()
+```
+
+**Run local tests:**
+
+```bash
+# Test with local PDF file (no AWS credentials needed for page extraction)
+poetry run python test_local.py /path/to/document.pdf "7,8,16-18"
+
+# Test with S3 event (requires AWS credentials)
+AWS_PROFILE=your-profile poetry run python test_local.py
+```
+
 ---
 
 ## Datalake Integration
