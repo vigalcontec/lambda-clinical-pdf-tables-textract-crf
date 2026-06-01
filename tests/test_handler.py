@@ -9,12 +9,14 @@ from handler.config import Settings, get_settings
 class TestHandler:
     """Tests for main handler function."""
 
+    @patch("handler.utils.textract.s3_client")
     @patch("handler.utils.s3.s3_client")
     @patch("handler.utils.textract.textract_client")
     def test_handler_success(
         self,
         mock_textract: MagicMock,
         mock_s3: MagicMock,
+        mock_textract_s3: MagicMock,
         lambda_event: dict[str, Any],
         lambda_context: Any,
         sample_pdf_bytes: bytes,
@@ -26,8 +28,15 @@ class TestHandler:
         # Mock S3 download
         mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: sample_pdf_bytes)}
 
-        # Mock Textract response
-        mock_textract.analyze_document.return_value = textract_response
+        # Mock S3 upload for temp PDF (in textract module)
+        mock_textract_s3.put_object.return_value = {}
+
+        # Mock async Textract flow
+        mock_textract.start_document_analysis.return_value = {"JobId": "test-job-123"}
+        mock_textract.get_document_analysis.return_value = {
+            "JobStatus": "SUCCEEDED",
+            **textract_response,
+        }
 
         from handler.main import handler
 
@@ -36,14 +45,15 @@ class TestHandler:
         assert result["status"] == "SUCCESS"
         assert result["s3_bucket"] == "test-bucket"
         assert result["s3_key"] == "test/document.pdf"
-        assert result["tables_extracted"] == 1
 
+    @patch("handler.utils.textract.s3_client")
     @patch("handler.utils.s3.s3_client")
     @patch("handler.utils.textract.textract_client")
     def test_handler_extracts_tables(
         self,
         mock_textract: MagicMock,
         mock_s3: MagicMock,
+        mock_textract_s3: MagicMock,
         lambda_event: dict[str, Any],
         lambda_context: Any,
         sample_pdf_bytes: bytes,
@@ -53,14 +63,20 @@ class TestHandler:
         get_settings.cache_clear()
 
         mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: sample_pdf_bytes)}
-        mock_textract.analyze_document.return_value = textract_response
+        mock_textract_s3.put_object.return_value = {}
+        mock_textract.start_document_analysis.return_value = {"JobId": "test-job-123"}
+        mock_textract.get_document_analysis.return_value = {
+            "JobStatus": "SUCCEEDED",
+            **textract_response,
+        }
 
         from handler.main import handler
 
         result = handler(lambda_event, lambda_context)
 
-        assert len(result["tables"]) == 1
-        table = result["tables"][0]
+        assert result["status"] == "SUCCESS"
+        assert result["table"] is not None
+        table = result["table"]
         assert table["row_count"] == 2
         assert table["column_count"] == 2
         assert table["rows"][0] == ["Header1", "Header2"]
@@ -101,8 +117,7 @@ class TestHandler:
 
         assert result["status"] == "SUCCESS"
         assert result["pages_processed"] == []
-        assert result["tables_extracted"] == 0
-        assert result["tables"] == []
+        assert result["table"] is None
 
 
 class TestConfig:
@@ -237,10 +252,13 @@ class TestTextractUtils:
 
         mock_textract.start_document_analysis.return_value = {"JobId": "test-job-123"}
 
-        job_id = start_textract_analysis(b"pdf-bytes")
+        job_id = start_textract_analysis("test-bucket", "test-key.pdf")
 
         assert job_id == "test-job-123"
-        mock_textract.start_document_analysis.assert_called_once()
+        mock_textract.start_document_analysis.assert_called_once_with(
+            DocumentLocation={"S3Object": {"Bucket": "test-bucket", "Name": "test-key.pdf"}},
+            FeatureTypes=["TABLES"],
+        )
 
 
 class TestS3Utils:
@@ -261,6 +279,122 @@ class TestS3Utils:
         mock_s3.get_object.assert_called_once_with(
             Bucket="test-bucket", Key="test/file.pdf"
         )
+
+
+class TestDynamoDBUtils:
+    """Tests for DynamoDB utility functions."""
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_increment_tables_processed(self, mock_resource: MagicMock) -> None:
+        """Test increment_tables_processed updates DynamoDB."""
+        from handler.utils.dynamodb import increment_tables_processed
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        increment_tables_processed("test-table", "job-123")
+
+        mock_table.update_item.assert_called_once()
+        call_args = mock_table.update_item.call_args
+        assert call_args.kwargs["Key"] == {"PK": "JOB#job-123", "SK": "METADATA"}
+
+    def test_increment_tables_processed_no_table(self) -> None:
+        """Test increment_tables_processed with no table name."""
+        from handler.utils.dynamodb import increment_tables_processed
+
+        # Should not raise, just log warning
+        increment_tables_processed("", "job-123")
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_increment_tables_failed(self, mock_resource: MagicMock) -> None:
+        """Test increment_tables_failed updates DynamoDB."""
+        from handler.utils.dynamodb import increment_tables_failed
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        increment_tables_failed("test-table", "job-123", "Test error")
+
+        mock_table.update_item.assert_called_once()
+        call_args = mock_table.update_item.call_args
+        assert ":error" in call_args.kwargs["ExpressionAttributeValues"]
+
+    def test_increment_tables_failed_no_table(self) -> None:
+        """Test increment_tables_failed with no table name."""
+        from handler.utils.dynamodb import increment_tables_failed
+
+        # Should not raise, just log warning
+        increment_tables_failed("", "job-123")
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_create_table_record(self, mock_resource: MagicMock) -> None:
+        """Test create_table_record creates DynamoDB item."""
+        from handler.utils.dynamodb import create_table_record
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        table_data = {
+            "row_count": 5,
+            "column_count": 3,
+            "confidence": 99.5,
+            "rows": [["a", "b", "c"]],
+        }
+
+        result = create_table_record(
+            table_name="test-table",
+            job_id="job-123",
+            table_number=1,
+            page=7,
+            product_name="keytruda",
+            table_title="Table 1",
+            table_data=table_data,
+        )
+
+        assert result is not None
+        assert result["job_id"] == "job-123"
+        assert result["table_number"] == 1
+        mock_table.put_item.assert_called_once()
+
+    def test_create_table_record_no_table(self) -> None:
+        """Test create_table_record with no table name."""
+        from handler.utils.dynamodb import create_table_record
+
+        result = create_table_record(
+            table_name="",
+            job_id="job-123",
+            table_number=1,
+            page=7,
+            product_name="keytruda",
+            table_title="Table 1",
+            table_data=None,
+        )
+
+        assert result is None
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_create_table_record_with_error(self, mock_resource: MagicMock) -> None:
+        """Test create_table_record with error message."""
+        from handler.utils.dynamodb import create_table_record
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        result = create_table_record(
+            table_name="test-table",
+            job_id="job-123",
+            table_number=1,
+            page=7,
+            product_name="keytruda",
+            table_title="Table 1",
+            table_data=None,
+            status="FAILED",
+            error_message="Extraction failed",
+        )
+
+        assert result is not None
+        assert result["status"] == "FAILED"
+        assert result["error_message"] == "Extraction failed"
 
 
 class TestSSMUtils:
