@@ -140,7 +140,8 @@ resource "aws_iam_role_policy" "dynamodb_access" {
         Effect = "Allow"
         Action = [
           "dynamodb:UpdateItem",
-          "dynamodb:GetItem"
+          "dynamodb:GetItem",
+          "dynamodb:PutItem"
         ]
         Resource = [
           local.dynamodb.clinical_pdf_jobs.table_arn
