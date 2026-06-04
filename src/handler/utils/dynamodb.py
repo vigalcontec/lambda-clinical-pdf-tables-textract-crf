@@ -38,9 +38,10 @@ def increment_tables_processed(
     logger.info("Incrementing tables_processed", extra={"job_id": job_id})
     table.update_item(
         Key={"PK": f"JOB#{job_id}", "SK": "METADATA"},
-        UpdateExpression="SET tables_processed = tables_processed + :inc, updated_at = :now",
+        UpdateExpression="SET tables_processed = if_not_exists(tables_processed, :zero) + :inc, updated_at = :now",
         ExpressionAttributeValues={
             ":inc": 1,
+            ":zero": 0,
             ":now": now,
         },
     )
@@ -66,9 +67,10 @@ def increment_tables_failed(
     table = _get_dynamodb_resource().Table(table_name)
     now = datetime.now(UTC).isoformat()
 
-    update_expr = "SET tables_failed = tables_failed + :inc, updated_at = :now"
+    update_expr = "SET tables_failed = if_not_exists(tables_failed, :zero) + :inc, updated_at = :now"
     expr_values: dict[str, Any] = {
         ":inc": 1,
+        ":zero": 0,
         ":now": now,
     }
 
