@@ -1,6 +1,8 @@
 """DynamoDB utility functions for job tracking and table record updates."""
 
+import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from functools import lru_cache
 from typing import Any
 
@@ -142,9 +144,11 @@ def create_table_record(
     if table_data:
         item["row_count"] = table_data.get("row_count", 0)
         item["column_count"] = table_data.get("column_count", 0)
-        item["confidence"] = table_data.get("confidence", 0)
-        # Store table rows as JSON (DynamoDB supports nested structures)
-        item["table_rows"] = table_data.get("rows", [])
+        # Convert float to Decimal for DynamoDB compatibility
+        confidence = table_data.get("confidence", 0)
+        item["confidence"] = Decimal(str(confidence)) if confidence else Decimal("0")
+        # Store table rows as JSON string to avoid float issues in nested structures
+        item["table_rows"] = json.dumps(table_data.get("rows", []))
 
     if error_message:
         item["error_message"] = error_message
