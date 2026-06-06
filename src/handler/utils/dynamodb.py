@@ -104,12 +104,16 @@ def create_table_record(
 ) -> dict[str, Any] | None:
     """Create or update a table extraction record in DynamoDB.
 
+    Creates a record with GSI1 keys for product-based queries:
+    - GSI1PK: PRODUCT#{product_name} - enables filtering all tables by product
+    - GSI1SK: STATUS#{status}#TABLE#{table_number} - enables filtering by status within product
+
     Args:
         table_name: DynamoDB table name
         job_id: Job identifier
         table_number: Table number in the document
         page: Page number where table was found
-        product_name: Product name
+        product_name: Product name (used for GSI1PK to enable product filtering)
         table_title: Table title/name
         table_data: Extracted table data (rows, columns, confidence)
         status: Extraction status (SUCCESS, FAILED)
@@ -118,6 +122,13 @@ def create_table_record(
 
     Returns:
         The created DynamoDB item or None if table_name not configured
+
+    Example GSI1 Query:
+        To get all tables for a product:
+        GSI1PK = "PRODUCT#keytruda"
+
+        To get all failed tables for a product:
+        GSI1PK = "PRODUCT#keytruda" AND begins_with(GSI1SK, "STATUS#FAILED")
     """
     if not table_name:
         logger.warning("DynamoDB table name not configured, skipping record creation")
@@ -127,9 +138,17 @@ def create_table_record(
     now = datetime.now(UTC)
     ttl = int(now.timestamp()) + (ttl_days * 24 * 60 * 60)
 
+    # Normalize product name for consistent GSI keys (lowercase, no spaces)
+    normalized_product = product_name.lower().replace(" ", "-") if product_name else "unknown"
+
     item: dict[str, Any] = {
+        # Primary keys
         "PK": f"JOB#{job_id}",
         "SK": f"TABLE#{table_number}#PAGE#{page}",
+        # GSI1 keys for product-based queries
+        "GSI1PK": f"PRODUCT#{normalized_product}",
+        "GSI1SK": f"STATUS#{status}#TABLE#{table_number}#PAGE#{page}",
+        # Attributes
         "job_id": job_id,
         "table_number": table_number,
         "page": page,
@@ -160,6 +179,8 @@ def create_table_record(
             "table_number": table_number,
             "page": page,
             "status": status,
+            "product_name": product_name,
+            "gsi1pk": item["GSI1PK"],
         },
     )
     table.put_item(Item=item)

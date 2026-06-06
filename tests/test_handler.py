@@ -328,7 +328,7 @@ class TestDynamoDBUtils:
 
     @patch("handler.utils.dynamodb._get_dynamodb_resource")
     def test_create_table_record(self, mock_resource: MagicMock) -> None:
-        """Test create_table_record creates DynamoDB item."""
+        """Test create_table_record creates DynamoDB item with GSI keys."""
         from handler.utils.dynamodb import create_table_record
 
         mock_table = MagicMock()
@@ -346,7 +346,7 @@ class TestDynamoDBUtils:
             job_id="job-123",
             table_number=1,
             page=7,
-            product_name="keytruda",
+            product_name="Keytruda",
             table_title="Table 1",
             table_data=table_data,
         )
@@ -354,6 +354,10 @@ class TestDynamoDBUtils:
         assert result is not None
         assert result["job_id"] == "job-123"
         assert result["table_number"] == 1
+        # Verify GSI1 keys for product filtering
+        assert result["GSI1PK"] == "PRODUCT#keytruda"
+        assert result["GSI1SK"] == "STATUS#SUCCESS#TABLE#1#PAGE#7"
+        assert result["status"] == "SUCCESS"
         mock_table.put_item.assert_called_once()
 
     def test_create_table_record_no_table(self) -> None:
@@ -374,7 +378,7 @@ class TestDynamoDBUtils:
 
     @patch("handler.utils.dynamodb._get_dynamodb_resource")
     def test_create_table_record_with_error(self, mock_resource: MagicMock) -> None:
-        """Test create_table_record with error message."""
+        """Test create_table_record with error message includes GSI keys for filtering."""
         from handler.utils.dynamodb import create_table_record
 
         mock_table = MagicMock()
@@ -395,6 +399,53 @@ class TestDynamoDBUtils:
         assert result is not None
         assert result["status"] == "FAILED"
         assert result["error_message"] == "Extraction failed"
+        # Verify GSI1 keys allow filtering failed tables by product
+        assert result["GSI1PK"] == "PRODUCT#keytruda"
+        assert result["GSI1SK"] == "STATUS#FAILED#TABLE#1#PAGE#7"
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_create_table_record_normalizes_product_name(self, mock_resource: MagicMock) -> None:
+        """Test create_table_record normalizes product name for GSI keys."""
+        from handler.utils.dynamodb import create_table_record
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        result = create_table_record(
+            table_name="test-table",
+            job_id="job-123",
+            table_number=2,
+            page=10,
+            product_name="Product With Spaces",
+            table_title="Table 2",
+            table_data=None,
+        )
+
+        assert result is not None
+        # Product name should be normalized (lowercase, spaces replaced with hyphens)
+        assert result["GSI1PK"] == "PRODUCT#product-with-spaces"
+        assert result["product_name"] == "Product With Spaces"  # Original preserved
+
+    @patch("handler.utils.dynamodb._get_dynamodb_resource")
+    def test_create_table_record_empty_product_name(self, mock_resource: MagicMock) -> None:
+        """Test create_table_record handles empty product name."""
+        from handler.utils.dynamodb import create_table_record
+
+        mock_table = MagicMock()
+        mock_resource.return_value.Table.return_value = mock_table
+
+        result = create_table_record(
+            table_name="test-table",
+            job_id="job-123",
+            table_number=1,
+            page=5,
+            product_name="",
+            table_title="Table 1",
+            table_data=None,
+        )
+
+        assert result is not None
+        assert result["GSI1PK"] == "PRODUCT#unknown"
 
 
 class TestSSMUtils:

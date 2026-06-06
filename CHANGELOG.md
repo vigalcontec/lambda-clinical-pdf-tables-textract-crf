@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-06
+
+### Added
+
+- **GSI1 Keys for Product Filtering** - Table records now include GSI1PK and GSI1SK for efficient product-based queries
+  - `GSI1PK`: `PRODUCT#{normalized_product_name}` - Query all tables for a specific product
+  - `GSI1SK`: `STATUS#{status}#TABLE#{table_number}#PAGE#{page}` - Filter by status within a product
+  - Product names are normalized (lowercase, spaces replaced with hyphens)
+
+### Changed
+
+- **Improved Error Tracking** - Failed table extractions are now properly recorded in DynamoDB with:
+  - `status`: "FAILED"
+  - `error_message`: Detailed error description
+  - GSI1 keys for filtering failed tables by product
+
+### Example Queries
+
+```python
+# Get all tables for a product
+response = table.query(
+    IndexName="GSI1",
+    KeyConditionExpression="GSI1PK = :pk",
+    ExpressionAttributeValues={":pk": "PRODUCT#keytruda"}
+)
+
+# Get all failed tables for a product
+response = table.query(
+    IndexName="GSI1",
+    KeyConditionExpression="GSI1PK = :pk AND begins_with(GSI1SK, :sk)",
+    ExpressionAttributeValues={
+        ":pk": "PRODUCT#keytruda",
+        ":sk": "STATUS#FAILED"
+    }
+)
+```
+
+---
+
 ## [0.1.0] - 2026-05-17
 
 ### Added
