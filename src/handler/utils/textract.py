@@ -79,7 +79,7 @@ def start_textract_analysis(bucket: str, key: str) -> str:
     """
     response = textract_client.start_document_analysis(
         DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}},
-        FeatureTypes=["TABLES"],
+        FeatureTypes=["TABLES", "LAYOUT"],
     )
     job_id: str = response["JobId"]
     logger.info("Started Textract job", extra={"job_id": job_id, "bucket": bucket, "key": key})
@@ -140,27 +140,153 @@ def wait_for_textract_completion(job_id: str, max_wait_seconds: int = 300) -> di
 
 @tracer.capture_method
 def parse_textract_tables(textract_response: dict[str, Any]) -> list[dict[str, Any]]:
-    """Parse Textract response to extract structured table data.
+    """Parse Textract response to extract structured table data with titles.
+
+    Uses LAYOUT_TITLE blocks to find table titles. Textract associates
+    LAYOUT_TITLE blocks with tables when they appear directly above.
 
     Args:
         textract_response: Raw Textract response
 
     Returns:
-        List of tables with rows and cells
+        List of tables with rows, cells, and extracted titles
     """
     blocks = textract_response.get("Blocks", [])
 
     # Build block lookup
     block_map: dict[str, dict] = {block["Id"]: block for block in blocks}
 
+    # Find all LAYOUT_TITLE blocks and their positions for title matching
+    layout_titles = _extract_layout_titles(blocks, block_map)
+
     # Find all TABLE blocks
     tables = []
     for block in blocks:
         if block["BlockType"] == "TABLE":
             table_data = _extract_table_data(block, block_map)
+            # Try to find associated title using spatial proximity
+            table_title = _find_table_title(block, layout_titles)
+            if table_title:
+                table_data["title"] = table_title
             tables.append(table_data)
 
     return tables
+
+
+def _extract_layout_titles(
+    blocks: list[dict], block_map: dict[str, dict]
+) -> list[dict[str, Any]]:
+    """Extract all LAYOUT_TITLE blocks with their text and bounding boxes.
+
+    Args:
+        blocks: All Textract blocks
+        block_map: Lookup map of all blocks by ID
+
+    Returns:
+        List of title info dicts with text and geometry
+    """
+    titles = []
+    for block in blocks:
+        if block["BlockType"] == "LAYOUT_TITLE":
+            # Get the text content from child blocks
+            text = _get_block_text(block, block_map)
+            geometry = block.get("Geometry", {}).get("BoundingBox", {})
+            page = block.get("Page", 1)
+            titles.append({
+                "text": text,
+                "geometry": geometry,
+                "page": page,
+                "bottom": geometry.get("Top", 0) + geometry.get("Height", 0),
+            })
+    return titles
+
+
+def _get_block_text(block: dict, block_map: dict[str, dict]) -> str:
+    """Get text content from a block by following its child relationships.
+
+    Args:
+        block: Textract block
+        block_map: Lookup map of all blocks by ID
+
+    Returns:
+        Concatenated text from all child WORD blocks
+    """
+    text_parts = []
+    relationships = block.get("Relationships", [])
+
+    for rel in relationships:
+        if rel["Type"] == "CHILD":
+            for child_id in rel["Ids"]:
+                child_block = block_map.get(child_id)
+                if child_block:
+                    if child_block["BlockType"] == "WORD":
+                        text_parts.append(child_block.get("Text", ""))
+                    elif child_block["BlockType"] == "LINE":
+                        # LINE blocks may have their own text
+                        line_text = child_block.get("Text", "")
+                        if line_text:
+                            text_parts.append(line_text)
+
+    return " ".join(text_parts)
+
+
+def _find_table_title(
+    table_block: dict, layout_titles: list[dict[str, Any]]
+) -> str | None:
+    """Find the title associated with a table using spatial proximity.
+
+    Looks for LAYOUT_TITLE blocks that appear directly above the table
+    on the same page.
+
+    Args:
+        table_block: TABLE block from Textract
+        layout_titles: List of extracted LAYOUT_TITLE info
+
+    Returns:
+        Title text if found, None otherwise
+    """
+    table_geometry = table_block.get("Geometry", {}).get("BoundingBox", {})
+    table_top = table_geometry.get("Top", 0)
+    table_left = table_geometry.get("Left", 0)
+    table_width = table_geometry.get("Width", 1)
+    table_page = table_block.get("Page", 1)
+
+    # Find titles on the same page that are above the table
+    candidates = []
+    for title in layout_titles:
+        if title["page"] != table_page:
+            continue
+
+        title_bottom = title["bottom"]
+        title_left = title["geometry"].get("Left", 0)
+
+        # Title must be above the table (with some tolerance)
+        if title_bottom > table_top:
+            continue
+
+        # Title should be roughly aligned horizontally with the table
+        # (within the table's horizontal span)
+        title_center = title_left + title["geometry"].get("Width", 0) / 2
+        table_center = table_left + table_width / 2
+        horizontal_distance = abs(title_center - table_center)
+
+        # Calculate vertical distance (gap between title bottom and table top)
+        vertical_distance = table_top - title_bottom
+
+        # Only consider titles close to the table (within 10% of page height)
+        if vertical_distance < 0.1 and horizontal_distance < 0.3:
+            candidates.append({
+                "text": title["text"],
+                "distance": vertical_distance,
+            })
+
+    if not candidates:
+        return None
+
+    # Return the closest title (smallest vertical distance)
+    candidates.sort(key=lambda x: x["distance"])
+    title_text: str = candidates[0]["text"]
+    return title_text
 
 
 def _extract_table_data(table_block: dict, block_map: dict[str, dict]) -> dict[str, Any]:

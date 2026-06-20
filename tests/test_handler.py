@@ -257,7 +257,7 @@ class TestTextractUtils:
         assert job_id == "test-job-123"
         mock_textract.start_document_analysis.assert_called_once_with(
             DocumentLocation={"S3Object": {"Bucket": "test-bucket", "Name": "test-key.pdf"}},
-            FeatureTypes=["TABLES"],
+            FeatureTypes=["TABLES", "LAYOUT"],
         )
 
 

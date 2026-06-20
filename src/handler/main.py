@@ -184,12 +184,18 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
             )
             selected_table = None
 
+        # Use Textract-extracted title if available, otherwise fall back to event's table_name
+        # Textract extracts titles from LAYOUT_TITLE blocks which are more accurate
+        extracted_title = selected_table.get("title") if selected_table else None
+        final_table_name = extracted_title if extracted_title else table_name
+
         logger.info(
             "Textract extraction completed",
             extra={
                 "tables_found": len(all_tables),
                 "table_index_selected": table_index,
                 "pages_processed": flat_pages,
+                "extracted_title": extracted_title,
             },
         )
 
@@ -203,7 +209,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                     table_number=table_number or 0,
                     page=flat_pages[0] if flat_pages else 0,
                     product_name=product_name,
-                    table_title=table_name,
+                    table_title=final_table_name,
                     table_data=selected_table,
                     status="SUCCESS",
                 )
@@ -218,7 +224,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
             "s3_bucket": bucket,
             "s3_key": key,
             "product_name": product_name,
-            "table_name": table_name,
+            "table_name": final_table_name,
             "table_number": table_number,
             "pages_processed": flat_pages,
             "table_index_on_page": table_index,
