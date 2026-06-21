@@ -86,8 +86,14 @@ docker-push: ## Build and push to ECR
 # Local Development
 # ─────────────────────────────────────────────────────────────────────────────
 
-run-local: ## Run handler locally (for testing)
-	ENVIRONMENT=$(ENV) poetry run python -c "from handler.main import handler; print(handler({'test': 'event'}, None))"
+run-local: ## Run handler locally with a single test event
+	poetry run python scripts/test_single_event.py
+
+local-test: ## Run local test with events file (use EVENTS_FILE and EVENT_INDEX)
+	poetry run python scripts/local_test.py --events-file $(EVENTS_FILE) --event-index $(EVENT_INDEX)
+
+local-test-help: ## Show local test script help
+	poetry run python scripts/local_test.py --help
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Terraform
