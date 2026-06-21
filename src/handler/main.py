@@ -174,15 +174,34 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
             # Clean up temp file
             delete_temp_pdf_from_s3(bucket, temp_key)
 
-        # Select the specific table by index
-        if table_index < len(all_tables):
+        # Select the specific table by index and determine status
+        # Status codes:
+        # - SUCCESS: Table found and extracted
+        # - NO_TABLE_FOUND: Locator detected table reference but Textract found no table structure
+        # - TABLE_INDEX_OUT_OF_RANGE: Tables found but requested index doesn't exist
+        if len(all_tables) == 0:
+            # Locator found "Table X:" text but no actual table structure on page
+            # This is a false positive from the locator
+            status = "NO_TABLE_FOUND"
+            selected_table = None
+            logger.warning(
+                "No table structure found on page - locator false positive",
+                extra={
+                    "table_number": table_number,
+                    "table_name": table_name,
+                    "pages": flat_pages,
+                },
+            )
+        elif table_index < len(all_tables):
+            status = "SUCCESS"
             selected_table = all_tables[table_index]
         else:
+            status = "TABLE_INDEX_OUT_OF_RANGE"
+            selected_table = None
             logger.warning(
                 f"Table index {table_index} out of range. Found {len(all_tables)} tables.",
                 extra={"table_index": table_index, "tables_found": len(all_tables)},
             )
-            selected_table = None
 
         # Use Textract-extracted title if available, otherwise fall back to event's table_name
         # Textract extracts titles from LAYOUT_TITLE blocks which are more accurate
@@ -192,6 +211,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         logger.info(
             "Textract extraction completed",
             extra={
+                "status": status,
                 "tables_found": len(all_tables),
                 "table_index_selected": table_index,
                 "pages_processed": flat_pages,
@@ -211,7 +231,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                     product_name=product_name,
                     table_title=final_table_name,
                     table_data=selected_table,
-                    status="SUCCESS",
+                    status=status,
                 )
             except Exception as db_error:
                 logger.warning(
@@ -220,7 +240,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                 )
 
         return {
-            "status": "SUCCESS",
+            "status": status,
             "s3_bucket": bucket,
             "s3_key": key,
             "product_name": product_name,
