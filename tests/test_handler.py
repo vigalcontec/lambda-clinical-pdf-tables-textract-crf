@@ -260,6 +260,280 @@ class TestTextractUtils:
             FeatureTypes=["TABLES", "LAYOUT"],
         )
 
+    def test_extract_layout_titles(self) -> None:
+        """Test extracting LAYOUT_TITLE blocks from Textract response."""
+        from handler.utils.textract import _extract_layout_titles
+
+        blocks = [
+            {
+                "Id": "title-1",
+                "BlockType": "LAYOUT_TITLE",
+                "Geometry": {"BoundingBox": {"Top": 0.1, "Left": 0.1, "Width": 0.5, "Height": 0.05}},
+                "Page": 1,
+                "Relationships": [{"Type": "CHILD", "Ids": ["word-1", "word-2"]}],
+            },
+            {
+                "Id": "word-1",
+                "BlockType": "WORD",
+                "Text": "Table",
+            },
+            {
+                "Id": "word-2",
+                "BlockType": "WORD",
+                "Text": "1:",
+            },
+            {
+                "Id": "table-1",
+                "BlockType": "TABLE",
+            },
+        ]
+        block_map = {b["Id"]: b for b in blocks}
+
+        titles = _extract_layout_titles(blocks, block_map)
+
+        assert len(titles) == 1
+        assert titles[0]["text"] == "Table 1:"
+        assert titles[0]["page"] == 1
+        assert abs(titles[0]["bottom"] - 0.15) < 0.001  # Top + Height (float comparison)
+
+    def test_extract_layout_titles_with_line_blocks(self) -> None:
+        """Test extracting titles when child blocks are LINE type."""
+        from handler.utils.textract import _extract_layout_titles
+
+        blocks = [
+            {
+                "Id": "title-1",
+                "BlockType": "LAYOUT_TITLE",
+                "Geometry": {"BoundingBox": {"Top": 0.1, "Left": 0.1, "Width": 0.5, "Height": 0.05}},
+                "Page": 1,
+                "Relationships": [{"Type": "CHILD", "Ids": ["line-1"]}],
+            },
+            {
+                "Id": "line-1",
+                "BlockType": "LINE",
+                "Text": "Table 1: Adverse Reactions",
+            },
+        ]
+        block_map = {b["Id"]: b for b in blocks}
+
+        titles = _extract_layout_titles(blocks, block_map)
+
+        assert len(titles) == 1
+        assert titles[0]["text"] == "Table 1: Adverse Reactions"
+
+    def test_extract_layout_titles_empty(self) -> None:
+        """Test extracting titles when no LAYOUT_TITLE blocks exist."""
+        from handler.utils.textract import _extract_layout_titles
+
+        blocks = [{"Id": "table-1", "BlockType": "TABLE"}]
+        block_map = {b["Id"]: b for b in blocks}
+
+        titles = _extract_layout_titles(blocks, block_map)
+
+        assert titles == []
+
+    def test_get_block_text(self) -> None:
+        """Test getting text from a block's children."""
+        from handler.utils.textract import _get_block_text
+
+        block = {
+            "Id": "parent",
+            "Relationships": [{"Type": "CHILD", "Ids": ["word-1", "word-2", "word-3"]}],
+        }
+        block_map = {
+            "parent": block,
+            "word-1": {"BlockType": "WORD", "Text": "Hello"},
+            "word-2": {"BlockType": "WORD", "Text": "World"},
+            "word-3": {"BlockType": "WORD", "Text": "!"},
+        }
+
+        text = _get_block_text(block, block_map)
+
+        assert text == "Hello World !"
+
+    def test_get_block_text_no_relationships(self) -> None:
+        """Test getting text from a block with no relationships."""
+        from handler.utils.textract import _get_block_text
+
+        block = {"Id": "parent"}
+        block_map = {"parent": block}
+
+        text = _get_block_text(block, block_map)
+
+        assert text == ""
+
+    def test_find_table_title(self) -> None:
+        """Test finding a title for a table based on spatial proximity."""
+        from handler.utils.textract import _find_table_title
+
+        table_block = {
+            "Id": "table-1",
+            "BlockType": "TABLE",
+            "Geometry": {"BoundingBox": {"Top": 0.3, "Left": 0.1, "Width": 0.8, "Height": 0.4}},
+            "Page": 1,
+        }
+
+        layout_titles = [
+            {
+                "text": "Table 1: Adverse Reactions",
+                "geometry": {"Top": 0.2, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,
+                "bottom": 0.25,
+            },
+        ]
+
+        title = _find_table_title(table_block, layout_titles)
+
+        assert title == "Table 1: Adverse Reactions"
+
+    def test_find_table_title_no_match(self) -> None:
+        """Test finding title when no title is close enough."""
+        from handler.utils.textract import _find_table_title
+
+        table_block = {
+            "Id": "table-1",
+            "BlockType": "TABLE",
+            "Geometry": {"BoundingBox": {"Top": 0.8, "Left": 0.1, "Width": 0.8, "Height": 0.1}},
+            "Page": 1,
+        }
+
+        layout_titles = [
+            {
+                "text": "Some Title",
+                "geometry": {"Top": 0.1, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,
+                "bottom": 0.15,  # Too far from table (0.65 gap > 0.1 threshold)
+            },
+        ]
+
+        title = _find_table_title(table_block, layout_titles)
+
+        assert title is None
+
+    def test_find_table_title_different_page(self) -> None:
+        """Test finding title when title is on different page."""
+        from handler.utils.textract import _find_table_title
+
+        table_block = {
+            "Id": "table-1",
+            "BlockType": "TABLE",
+            "Geometry": {"BoundingBox": {"Top": 0.3, "Left": 0.1, "Width": 0.8, "Height": 0.4}},
+            "Page": 2,
+        }
+
+        layout_titles = [
+            {
+                "text": "Table 1: Adverse Reactions",
+                "geometry": {"Top": 0.2, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,  # Different page
+                "bottom": 0.25,
+            },
+        ]
+
+        title = _find_table_title(table_block, layout_titles)
+
+        assert title is None
+
+    def test_find_table_title_below_table(self) -> None:
+        """Test that titles below the table are not matched."""
+        from handler.utils.textract import _find_table_title
+
+        table_block = {
+            "Id": "table-1",
+            "BlockType": "TABLE",
+            "Geometry": {"BoundingBox": {"Top": 0.2, "Left": 0.1, "Width": 0.8, "Height": 0.3}},
+            "Page": 1,
+        }
+
+        layout_titles = [
+            {
+                "text": "Title Below Table",
+                "geometry": {"Top": 0.6, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,
+                "bottom": 0.65,  # Below the table
+            },
+        ]
+
+        title = _find_table_title(table_block, layout_titles)
+
+        assert title is None
+
+    def test_find_table_title_closest_match(self) -> None:
+        """Test that the closest title is selected when multiple candidates exist."""
+        from handler.utils.textract import _find_table_title
+
+        table_block = {
+            "Id": "table-1",
+            "BlockType": "TABLE",
+            "Geometry": {"BoundingBox": {"Top": 0.4, "Left": 0.1, "Width": 0.8, "Height": 0.3}},
+            "Page": 1,
+        }
+
+        layout_titles = [
+            {
+                "text": "Far Title",
+                "geometry": {"Top": 0.25, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,
+                "bottom": 0.32,  # 0.08 gap
+            },
+            {
+                "text": "Close Title",
+                "geometry": {"Top": 0.33, "Left": 0.1, "Width": 0.5, "Height": 0.05},
+                "page": 1,
+                "bottom": 0.38,  # 0.02 gap - closer
+            },
+        ]
+
+        title = _find_table_title(table_block, layout_titles)
+
+        assert title == "Close Title"
+
+    def test_parse_textract_tables_with_title(self) -> None:
+        """Test parse_textract_tables includes extracted titles."""
+        from handler.utils.textract import parse_textract_tables
+
+        response = {
+            "Blocks": [
+                {
+                    "Id": "title-1",
+                    "BlockType": "LAYOUT_TITLE",
+                    "Geometry": {"BoundingBox": {"Top": 0.1, "Left": 0.1, "Width": 0.5, "Height": 0.05}},
+                    "Page": 1,
+                    "Relationships": [{"Type": "CHILD", "Ids": ["line-1"]}],
+                },
+                {
+                    "Id": "line-1",
+                    "BlockType": "LINE",
+                    "Text": "Table 1: Test Results",
+                },
+                {
+                    "Id": "table-1",
+                    "BlockType": "TABLE",
+                    "Geometry": {"BoundingBox": {"Top": 0.2, "Left": 0.1, "Width": 0.8, "Height": 0.3}},
+                    "Page": 1,
+                    "Confidence": 99.0,
+                    "Relationships": [{"Type": "CHILD", "Ids": ["cell-1"]}],
+                },
+                {
+                    "Id": "cell-1",
+                    "BlockType": "CELL",
+                    "RowIndex": 1,
+                    "ColumnIndex": 1,
+                    "Relationships": [{"Type": "CHILD", "Ids": ["word-1"]}],
+                },
+                {
+                    "Id": "word-1",
+                    "BlockType": "WORD",
+                    "Text": "Data",
+                },
+            ]
+        }
+
+        tables = parse_textract_tables(response)
+
+        assert len(tables) == 1
+        assert tables[0].get("title") == "Table 1: Test Results"
+
 
 class TestS3Utils:
     """Tests for S3 utility functions."""

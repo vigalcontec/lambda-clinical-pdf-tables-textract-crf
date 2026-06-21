@@ -66,10 +66,10 @@ def sample_pdf_bytes() -> bytes:
 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000052 00000 n 
-0000000101 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000052 00000 n
+0000000101 00000 n
 trailer<</Size 4/Root 1 0 R>>
 startxref
 172
