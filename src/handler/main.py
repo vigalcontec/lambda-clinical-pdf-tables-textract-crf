@@ -120,15 +120,20 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
         if not pages:
             logger.warning("No pages specified, returning empty result")
             return {
-                "status": "SUCCESS",
+                "status": "NO_TABLE_FOUND",
+                "reason": "No pages specified",
+                "job_id": job_id,
                 "s3_bucket": bucket,
                 "s3_key": key,
                 "product_name": product_name,
                 "table_name": table_name,
                 "table_number": table_number,
+                "page": None,
                 "pages_processed": [],
                 "table_index_on_page": table_index,
                 "table": None,
+                "formulations": event.get("formulations", []),
+                "formulation_key": event.get("formulation_key", ""),
             }
 
         # Flatten page groups (usually single page now)
@@ -241,15 +246,19 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
         return {
             "status": status,
+            "job_id": job_id,
             "s3_bucket": bucket,
             "s3_key": key,
             "product_name": product_name,
             "table_name": final_table_name,
             "table_number": table_number,
+            "page": flat_pages[0] if flat_pages else None,
             "pages_processed": flat_pages,
             "table_index_on_page": table_index,
             "tables_found_on_page": len(all_tables),
             "table": selected_table,
+            "formulations": event.get("formulations", []),
+            "formulation_key": event.get("formulation_key", ""),
         }
 
     except Exception as e:
@@ -279,11 +288,13 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
         return {
             "status": "FAILED",
+            "job_id": job_id,
             "error": str(e),
             "s3_bucket": event.get("s3_bucket"),
             "s3_key": event.get("s3_key"),
             "product_name": event.get("product_name"),
             "table_name": event.get("table_name"),
             "table_number": event.get("table_number"),
+            "page": event.get("page"),
         }
 

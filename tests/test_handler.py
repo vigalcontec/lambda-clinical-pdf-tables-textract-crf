@@ -115,7 +115,8 @@ class TestHandler:
             lambda_context,
         )
 
-        assert result["status"] == "SUCCESS"
+        assert result["status"] == "NO_TABLE_FOUND"
+        assert result["reason"] == "No pages specified"
         assert result["pages_processed"] == []
         assert result["table"] is None
 
