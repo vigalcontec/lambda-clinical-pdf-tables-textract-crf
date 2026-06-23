@@ -244,8 +244,16 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
                     extra={"error": str(db_error), "job_id": job_id},
                 )
 
+        # Determine reason based on status
+        reason = None
+        if status == "NO_TABLE_FOUND":
+            reason = "No table structure found on page"
+        elif status == "TABLE_INDEX_OUT_OF_RANGE":
+            reason = f"Table index {table_index} out of range, found {len(all_tables)} tables"
+
         return {
             "status": status,
+            "reason": reason,
             "job_id": job_id,
             "s3_bucket": bucket,
             "s3_key": key,
@@ -288,6 +296,7 @@ def handler(event: dict[str, Any], _context: LambdaContext) -> dict[str, Any]:
 
         return {
             "status": "FAILED",
+            "reason": str(e),
             "job_id": job_id,
             "error": str(e),
             "s3_bucket": event.get("s3_bucket"),
